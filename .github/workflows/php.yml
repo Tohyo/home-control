@@ -1,0 +1,57 @@
+name: PHP Build and Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+env:
+  APP_ENV: prod
+  APP_DEBUG: 0
+
+jobs:
+  build:
+
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+
+    - name: Set env variables
+      run: |
+        echo APP_ENV=prod > .env.local
+        echo APP_DEBUG=0 >> .env.local
+        echo MYFOX_USERNAME=${{ secrets.MYFOX_USERNAME }} >> .env.local
+
+    - name: Remove tests
+      run: cat .env.local && rm -Rf tests/
+
+    - name: Install dependencies
+      run: php -v && composer install --ignore-platform-reqs --no-dev -a
+
+    - name: Dump env
+      run: composer dump-env prod
+
+    - name: Docker build
+      run: docker build -t static-app -f static-build.Dockerfile .
+
+    - name: extract binary
+      run: docker cp $(docker create --name static-app-tmp static-app):/go/src/app/dist/frankenphp-linux-x86_64 home-control ; docker rm static-app-tmp
+    # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
+    # Docs: https://getcomposer.org/doc/articles/scripts.md
+
+    # - name: Run test suite
+    #   run: composer run-script test
